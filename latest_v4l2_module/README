@@ -1,3 +1,8 @@
-Built against a57d4fd153cb63b92e287df0c2f3f0be78c93198 + fix
-for pool sizing (commit f61584057e7455705ffc9eaa018a95e97a57c1c3).
+Built against
+fd1355b V4L2: Add option to disable enum_framesizes.
+dce1730 V4L2: Fix incorrect pool sizing
+a57d4fd Merge pull request #602 from DynamicDevices/rpi-3.12.y - TOP OF TREE
+
+This will only probably work with a 3.12.20+ kernel.
+
 27/5/2014
