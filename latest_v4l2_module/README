@@ -1,7 +1,7 @@
 Built against
+a5e9dfc V4L2: Extend range for V4L2_CID_MPEG_VIDEO_H264_I_PERIOD
+8f68232 Merge pull request #604 from 6by9/rpi-3.12.y-PR-140527 - TOP OF TREE
 fd1355b V4L2: Add option to disable enum_framesizes.
-dce1730 V4L2: Fix incorrect pool sizing
-a57d4fd Merge pull request #602 from DynamicDevices/rpi-3.12.y - TOP OF TREE
 
 This will only probably work with a 3.12.20+ kernel.
 
