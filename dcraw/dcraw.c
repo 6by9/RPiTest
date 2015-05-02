@@ -7719,6 +7719,15 @@ void CLASS identify()
 	maximum = (1 << tiff_bps) - (1 << table[i].max);
       }
   if (zero_fsize) fsize = 0;
+
+  strcpy (make, "OmniVision");
+  data_offset = 0; //ftell(ifp) + 0x8000-32;
+  width = raw_width;
+  raw_width = 2611;
+  raw_height = 1944;
+  load_raw = &CLASS nokia_load_raw;
+  filters = 0x16161616;
+
   if (make[0] == 0) parse_smal (0, flen);
   if (make[0] == 0) {
     parse_jpeg(0);
@@ -7731,7 +7740,7 @@ void CLASS identify()
       raw_width = 2611;
       load_raw = &CLASS nokia_load_raw;
       filters = 0x16161616;
-    } else is_raw = 0;
+    } //else is_raw = 0;
   }
 
   for (i=0; i < sizeof corp / sizeof *corp; i++)
