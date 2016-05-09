@@ -118,7 +118,7 @@ unsigned black, maximum, mix_green, raw_color, zero_is_bad;
 unsigned zero_after_ff, is_raw, dng_version, is_foveon, data_error;
 unsigned tile_width, tile_length, gpsdata[32], load_flags;
 unsigned flip, tiff_flip, filters, colors;
-ushort raw_height, raw_width, height, width, top_margin, left_margin;
+ushort raw_height, raw_width, raw_stride=0, height, width, top_margin, left_margin;
 ushort shrink, iheight, iwidth, fuji_width, thumb_width, thumb_height;
 ushort *raw_image, (*image)[4], cblack[4102];
 ushort white[8][8], curve[0x10000], cr2_slice[3], sraw_mul[4];
@@ -1960,7 +1960,10 @@ void CLASS nokia_load_raw()
   double sum[]={0,0};
 
   rev = 3 * (order == 0x4949);
-  dwide = (raw_width * 5 + 1) / 4;
+  if (raw_stride == 0)
+    dwide = (raw_width * 5 + 1) / 4;
+  else
+    dwide = raw_stride;
   data = (uchar *) malloc (dwide*2);
   merror (data, "nokia_load_raw()");
   for (row=0; row < raw_height; row++) {
@@ -1972,6 +1975,7 @@ void CLASS nokia_load_raw()
   free (data);
   maximum = 0x3ff;
   if (strcmp(make,"OmniVision")) return;
+  if (strcmp(make,"Sony")) return;
   row = raw_height/2;
   FORC(width-1) {
     sum[ c & 1] += SQR(RAW(row,c)-RAW(row+1,c+1));
@@ -7277,6 +7281,8 @@ void CLASS adobe_coeff (const char *make, const char *model)
 	{ 5491,-1192,-363,-4951,12342,2948,-911,1722,7192 } },
     { "Sony SLT-A99", 128, 0,
 	{ 6344,-1612,-462,-4863,12477,2681,-865,1786,6899 } },
+//    { "Sony", 16, 0,   /* DJC */
+//  { 6022,-2314,394,-936,4728,310,300,-4324,8126 } },
   };
   double cam_xyz[4][3];
   char name[130];
@@ -7806,15 +7812,73 @@ void CLASS identify()
   if (make[0] == 0) parse_smal (0, flen);
   if (make[0] == 0) {
     parse_jpeg(0);
-    if (!(strncmp(model,"ov",2) && strncmp(model,"RP_OV",5)) &&
-	!fseek (ifp, -6404096, SEEK_END) &&
-	fread (head, 1, 32, ifp) && !strcmp(head,"BRCMn")) {
-      strcpy (make, "OmniVision");
-      data_offset = ftell(ifp) + 0x8000-32;
-      width = raw_width;
-      raw_width = 2611;
+    if (!(strncmp(model,"ov",2) && strncmp(model,"RP_",3))) {
+      //This structure is at offset 0xB0 from the 'BRCM' ident.
+      struct brcm_raw_header {
+        uint8_t name[32];
+        uint16_t width;
+        uint16_t height;
+        uint16_t padding_right;
+        uint16_t padding_down;
+        uint32_t dummy[6];
+        uint16_t transform;
+        uint16_t format;
+        uint8_t bayer_order;
+        uint8_t bayer_format;
+      };
+      struct brcm_raw_header header;
+      uint8_t bayer_order = 0;
+
+      if (!strncmp(model, "RP_imx",6)) {
+        if(!fseek (ifp, -10270208, SEEK_END) &&
+	         fread (head, 1, 32, ifp) && !strncmp(head,"BRCM", 4)) {
+          data_offset = ftell(ifp) + 0x8000-32;
+          strcpy (make, "SonyRPF");
+          width = raw_width;
+          raw_width = 3303;  //This doesn't fall out nicely in the load routine.
+          if(!fseek (ifp, 144, SEEK_CUR) &&
+             fread(&header, 1, sizeof(header), ifp)) {
+            bayer_order = header.bayer_order;
+            raw_stride = ((((((header.width + header.padding_right)*5)+3)>>2) + 31)&(~31));
+            width = header.width;
+            height = header.height;
+          }
+        }
+      } else if (!strncmp(model, "RP_OV",5)) {
+        if(!fseek (ifp, -6404096, SEEK_END) &&
+	         fread (head, 1, 32, ifp) && !strcmp(head,"BRCMn")) {
+          strcpy (make, "OmniVision");
+          data_offset = ftell(ifp) + 0x8000-32;
+          width = raw_width;
+          raw_width = 2611;
+          bayer_order = 2;
+          if(!fseek (ifp, 144, SEEK_CUR) &&
+             fread(&header, 1, sizeof(header), ifp)) {
+            bayer_order = header.bayer_order;
+            raw_stride = ((((((header.width + header.padding_right)*5)+3)>>2) + 31)&(~31));
+            width = header.width;
+            height = header.height;
+          }
+        }
+      }
+
       load_raw = &CLASS nokia_load_raw;
-      filters = 0x16161616;
+      switch(bayer_order)
+      {
+        case 0: //RGGB
+          filters = 0x94949494;
+          break;
+        case 1: //GBRG
+          filters = 0x49494949;
+          break;
+        default:
+        case 2: //BGGR
+          filters = 0x16161616;
+          break;
+        case 3: //GRBG
+          filters = 0x61616161;
+          break;
+      }
     } else is_raw = 0;
   }
 
