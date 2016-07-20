@@ -7846,7 +7846,7 @@ void CLASS identify()
         }
       } else if (!strncmp(model, "RP_OV",5)) {
         if(!fseek (ifp, -6404096, SEEK_END) &&
-	         fread (head, 1, 32, ifp) && !strcmp(head,"BRCMn")) {
+	         fread (head, 1, 32, ifp) && !strncmp(head,"BRCM", 4)) {
           strcpy (make, "OmniVision");
           data_offset = ftell(ifp) + 0x8000-32;
           width = raw_width;
