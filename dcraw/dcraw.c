@@ -7844,7 +7844,8 @@ void CLASS identify()
             height = header.height;
           }
         }
-      } else if (!strncmp(model, "RP_OV",5)) {
+      } else if (!(strncmp(model, "RP_OV",5) &&
+                   strncmp(model, "RP_ov",5))) {
         if(!fseek (ifp, -6404096, SEEK_END) &&
 	         fread (head, 1, 32, ifp) && !strncmp(head,"BRCM", 4)) {
           strcpy (make, "OmniVision");
