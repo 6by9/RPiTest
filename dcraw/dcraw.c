@@ -1976,8 +1976,10 @@ void CLASS nokia_load_raw()
   }
   free (data);
   maximum = 0x3ff;
-  if (strcmp(make,"OmniVision")) return;
-  if (strcmp(make,"Sony")) return;
+  if (!strcmp(make,"OmniVision") ||
+      !strcmp(make,"Sony") ||
+      !strcmp(make,"RaspberryPi")) return;
+
   row = raw_height/2;
   FORC(width-1) {
     sum[ c & 1] += SQR(RAW(row,c)-RAW(row+1,c+1));
@@ -7925,36 +7927,65 @@ void CLASS identify()
       };
       struct brcm_raw_header header;
       uint8_t bayer_order = 0;
+      //Assume that this isn't a raw unless the header can be found
+      is_raw = 0;
 
-      if (!strncmp(model, "RP_imx",6)) {
-        if(!fseek (ifp, -10270208, SEEK_END) &&
-	         fread (head, 1, 32, ifp) && !strncmp(head,"BRCM", 4)) {
-          data_offset = ftell(ifp) + 0x8000-32;
-          strcpy (make, "SonyRPF");
-          width = raw_width;
-          raw_width = 3303;  //This doesn't fall out nicely in the load routine.
-          if(!fseek (ifp, 144, SEEK_CUR) &&
-             fread(&header, 1, sizeof(header), ifp)) {
-            bayer_order = header.bayer_order;
-            raw_stride = ((((((header.width + header.padding_right)*5)+3)>>2) + 31)&(~31));
-            width = header.width;
-            height = header.height;
+      if (!strncasecmp(model, "RP_imx",6)) {
+        const long offsets[] = {
+                //IMX219 offsets
+                10270208, //8MPix 3280x2464
+                2678784,  //1920x1080
+                2628608,  //1640x1232
+                1963008,  //1640x922
+                1233920,  //1280x720
+                445440,   //640x480
+                -1        //Marker for end of table
+        };
+        int offset_idx;
+        for (offset_idx=0; offsets[offset_idx]!=-1; offset_idx++) {
+          if(!fseek (ifp, -offsets[offset_idx], SEEK_END) &&
+             fread (head, 1, 32, ifp) && !strncmp(head,"BRCM", 4)) {
+            data_offset = ftell(ifp) + 0x8000-32;
+            strcpy (make, "SonyRPF");
+            width = raw_width;
+            if(!fseek (ifp, 144, SEEK_CUR) &&
+               fread(&header, 1, sizeof(header), ifp)) {
+              bayer_order = header.bayer_order;
+              raw_stride = ((((((header.width + header.padding_right)*5)+3)>>2) + 31)&(~31));
+              width = header.width;
+              raw_height = height = header.height;
+            }
+            is_raw = 1;
+            break;
           }
         }
-      } else if (!strncmp(model, "RP_OV",5)) {
-        if(!fseek (ifp, -6404096, SEEK_END) &&
-	         fread (head, 1, 32, ifp) && !strncmp(head,"BRCM", 4)) {
-          strcpy (make, "OmniVision");
-          data_offset = ftell(ifp) + 0x8000-32;
-          width = raw_width;
-          raw_width = 2611;
-          bayer_order = 2;
-          if(!fseek (ifp, 144, SEEK_CUR) &&
-             fread(&header, 1, sizeof(header), ifp)) {
-            bayer_order = header.bayer_order;
-            raw_stride = ((((((header.width + header.padding_right)*5)+3)>>2) + 31)&(~31));
-            width = header.width;
-            height = header.height;
+      } else if (!strncasecmp(model, "RP_OV",5) || !strncasecmp(model, "ov5647",6)) {
+        const long offsets[] = {
+                6404096,  //5MPix 2592x1944
+                2717696,  //1920x1080
+                1625600,  //1296x972
+                1233920,  //1296x730
+                445440,   //640x480
+                -1        //Marker for end of table
+        };
+        int offset_idx;
+        for (offset_idx=0; offsets[offset_idx]!=-1; offset_idx++) {
+          if(!fseek (ifp, -offsets[offset_idx], SEEK_END) &&
+             fread (head, 1, 32, ifp) && !strncmp(head,"BRCM", 4)) {
+            strcpy (make, "OmniVision");
+            data_offset = ftell(ifp) + 0x8000-32;
+            width = raw_width;
+            raw_width = 2611;
+            bayer_order = 2;
+            if(!fseek (ifp, 144, SEEK_CUR) &&
+               fread(&header, 1, sizeof(header), ifp)) {
+              bayer_order = header.bayer_order;
+              raw_stride = ((((((header.width + header.padding_right)*5)+3)>>2) + 31)&(~31));
+              width = header.width;
+              raw_height = height = header.height;
+            }
+            is_raw = 1;
+            break;
           }
         }
       }
