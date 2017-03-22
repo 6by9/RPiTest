@@ -6328,6 +6328,70 @@ void CLASS parse_foveon()
   }
 }
 
+void CLASS parse_raspberrypi()
+{
+  //This structure is at offset 0xB0 from the 'BRCM' ident.
+  struct brcm_raw_header {
+    uint8_t name[32];
+    uint16_t width;
+    uint16_t height;
+    uint16_t padding_right;
+    uint16_t padding_down;
+    uint32_t dummy[6];
+    uint16_t transform;
+    uint16_t format;
+    uint8_t bayer_order;
+    uint8_t bayer_format;
+  };
+  //Values taken from https://github.com/raspberrypi/userland/blob/master/interface/vctypes/vc_image_types.h
+  #define BRCM_FORMAT_BAYER  33
+  #define BRCM_BAYER_RAW10   3
+
+  struct brcm_raw_header header;
+  uint8_t brcm_tag[4];
+
+  // Sanity check that the caller has found a BRCM header
+  if (!fread(brcm_tag, 1, sizeof(brcm_tag), ifp) ||
+      memcmp(brcm_tag, "BRCM", sizeof(brcm_tag)))
+    return;
+
+  width = raw_width;
+  data_offset = ftell(ifp) + 0x8000 - sizeof(brcm_tag);
+
+  if(!fseek (ifp, 0xB0-sizeof(brcm_tag), SEEK_CUR) &&
+     fread(&header, 1, sizeof(header), ifp)) {
+    switch(header.bayer_order) {
+      case 0: //RGGB
+        filters = 0x94949494;
+        break;
+      case 1: //GBRG
+        filters = 0x49494949;
+        break;
+      default:
+      case 2: //BGGR
+        filters = 0x16161616;
+        break;
+      case 3: //GRBG
+        filters = 0x61616161;
+        break;
+    }
+
+    if (header.format == BRCM_FORMAT_BAYER) {
+      switch(header.bayer_format) {
+        case BRCM_BAYER_RAW10:
+          load_raw = &CLASS nokia_load_raw;
+          raw_stride = ((((((header.width + header.padding_right)*5)+3)>>2) + 31)&(~31));
+          width = header.width;
+          raw_height = height = header.height;
+          is_raw = 1;
+          break;
+        default:
+          break;
+      }
+    }
+  }
+}
+
 /*
    All matrices are from Adobe DNG Converter unless otherwise noted.
  */
@@ -7872,6 +7936,10 @@ void CLASS identify()
     parse_foveon();
   else if (!memcmp (head,"CI",2))
     parse_cine();
+  else if (!memcmp (head,"BRCM",4)) {
+    fseek (ifp, 0, SEEK_SET);
+    parse_raspberrypi();
+  }
   if (make[0] == 0)
     for (zero_fsize=i=0; i < sizeof table / sizeof *table; i++)
       if (fsize == table[i].fsize) {
@@ -7912,21 +7980,6 @@ void CLASS identify()
   if (make[0] == 0) {
     parse_jpeg(0);
     if (!(strncmp(model,"ov",2) && strncmp(model,"RP_",3))) {
-      //This structure is at offset 0xB0 from the 'BRCM' ident.
-      struct brcm_raw_header {
-        uint8_t name[32];
-        uint16_t width;
-        uint16_t height;
-        uint16_t padding_right;
-        uint16_t padding_down;
-        uint32_t dummy[6];
-        uint16_t transform;
-        uint16_t format;
-        uint8_t bayer_order;
-        uint8_t bayer_format;
-      };
-      struct brcm_raw_header header;
-      uint8_t bayer_order = 0;
       //Assume that this isn't a raw unless the header can be found
       is_raw = 0;
 
@@ -7945,17 +7998,10 @@ void CLASS identify()
         for (offset_idx=0; offsets[offset_idx]!=-1; offset_idx++) {
           if(!fseek (ifp, -offsets[offset_idx], SEEK_END) &&
              fread (head, 1, 32, ifp) && !strncmp(head,"BRCM", 4)) {
-            data_offset = ftell(ifp) + 0x8000-32;
+
+            fseek(ifp, -32, SEEK_CUR);
             strcpy (make, "SonyRPF");
-            width = raw_width;
-            if(!fseek (ifp, 144, SEEK_CUR) &&
-               fread(&header, 1, sizeof(header), ifp)) {
-              bayer_order = header.bayer_order;
-              raw_stride = ((((((header.width + header.padding_right)*5)+3)>>2) + 31)&(~31));
-              width = header.width;
-              raw_height = height = header.height;
-            }
-            is_raw = 1;
+            parse_raspberrypi();
             break;
           }
         }
@@ -7972,42 +8018,18 @@ void CLASS identify()
         for (offset_idx=0; offsets[offset_idx]!=-1; offset_idx++) {
           if(!fseek (ifp, -offsets[offset_idx], SEEK_END) &&
              fread (head, 1, 32, ifp) && !strncmp(head,"BRCM", 4)) {
+            fseek(ifp, -32, SEEK_CUR);
             strcpy (make, "OmniVision");
-            data_offset = ftell(ifp) + 0x8000-32;
             width = raw_width;
+            //Defaults
             raw_width = 2611;
-            bayer_order = 2;
-            if(!fseek (ifp, 144, SEEK_CUR) &&
-               fread(&header, 1, sizeof(header), ifp)) {
-              bayer_order = header.bayer_order;
-              raw_stride = ((((((header.width + header.padding_right)*5)+3)>>2) + 31)&(~31));
-              width = header.width;
-              raw_height = height = header.height;
-            }
-            is_raw = 1;
+            filters = 0x16161616;
+            parse_raspberrypi();
             break;
           }
         }
       }
-
-      load_raw = &CLASS nokia_load_raw;
-      switch(bayer_order)
-      {
-        case 0: //RGGB
-          filters = 0x94949494;
-          break;
-        case 1: //GBRG
-          filters = 0x49494949;
-          break;
-        default:
-        case 2: //BGGR
-          filters = 0x16161616;
-          break;
-        case 3: //GRBG
-          filters = 0x61616161;
-          break;
-      }
-    } else is_raw = 0;
+    }// else is_raw = 0;
   }
 
   for (i=0; i < sizeof corp / sizeof *corp; i++)
