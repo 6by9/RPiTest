@@ -1960,7 +1960,6 @@ void CLASS nokia_load_raw()
   uchar  *data,  *dp;
   int rev, dwide, row, col, c;
   double sum[]={0,0};
-
   rev = 3 * (order == 0x4949);
   if (raw_stride == 0)
     dwide = (raw_width * 5 + 1) / 4;
@@ -6384,6 +6383,7 @@ void CLASS parse_raspberrypi()
           width = header.width;
           raw_height = height = header.height;
           is_raw = 1;
+          order = 0x4d4d;
           break;
         default:
           break;
@@ -7938,6 +7938,8 @@ void CLASS identify()
     parse_cine();
   else if (!memcmp (head,"BRCM",4)) {
     fseek (ifp, 0, SEEK_SET);
+    strcpy (make, "RaspberryPi");
+    strcpy (model,"Pi");
     parse_raspberrypi();
   }
   if (make[0] == 0)
