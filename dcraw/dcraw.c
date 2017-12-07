@@ -2104,7 +2104,7 @@ void CLASS load_raw16()
     if (fread (data+dwide, 1, dwide, ifp) < dwide) derror();
     FORC(dwide) data[c] = data[dwide+(c ^ rev)];
     for (dp=data, col=0; col < raw_width; dp+=2, col++)
-      RAW(row,col+c) = (dp[0] << 8) | dp[1];
+      RAW(row,col+c) = (dp[1] << 8) | dp[0];
   }
   free (data);
   maximum = 0xffff;
